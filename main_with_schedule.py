@@ -4,8 +4,9 @@
 __author__ = "ipetrash"
 
 
-import schedule
 import time
+
+import schedule
 
 from main import main as run, log
 
