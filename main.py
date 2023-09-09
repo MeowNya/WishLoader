@@ -67,7 +67,10 @@ def main():
         api = Api(LOGIN, PASSWORD)
         api.auth()
 
-        for file_name in DIR_NEW_WISHES.glob("*.xml"):
+        files = list(DIR_NEW_WISHES.glob("*.xml"))
+        log.info(f"Найдено файлов: {len(files)}")
+
+        for file_name in files:
             log.info(f"Чтение {file_name.name!r}")
 
             soup = BeautifulSoup(open(file_name, "rb"), "xml")
