@@ -241,4 +241,5 @@ cython_debug/
 
 # For current project
 logs/
+new_wishes/
 TOKEN.txt
