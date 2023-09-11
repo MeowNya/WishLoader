@@ -21,11 +21,11 @@ TOKEN_FILE_NAME = DIR / "TOKEN.txt"
 try:
     TOKEN = os.environ.get("TOKEN") or TOKEN_FILE_NAME.read_text("utf-8").strip()
     if not TOKEN:
-        raise Exception("TOKEN is empty!")
+        raise Exception("Токен пустой!")
 
 except:
     print(
-        f"You need to add the bot token to {TOKEN_FILE_NAME.name} or to the TOKEN environment variable"
+        f"Нужно добавить логин и пароль в файл {TOKEN_FILE_NAME.name} или в переменную окружения TOKEN"
     )
     TOKEN_FILE_NAME.touch()
     sys.exit()
