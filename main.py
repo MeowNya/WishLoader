@@ -64,7 +64,7 @@ def main():
     log.debug(f"{LOGIN}/{PASSWORD}")
 
     try:
-        api = Api(LOGIN, PASSWORD)
+        api = Api(LOGIN, PASSWORD, log=log)
         api.auth()
 
         files = list(DIR_NEW_WISHES.glob("*.xml"))

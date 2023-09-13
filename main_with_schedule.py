@@ -11,7 +11,7 @@ import schedule
 from main import main as run, log
 
 
-schedule.every().day.at("04:20").do(run)
+schedule.every().day.at("04:29").do(run)
 
 while True:
     try:

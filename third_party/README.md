@@ -1,2 +1,2 @@
 ### SOURCE:
- * [mywishlist_ru](https://github.com/gil9red/SimplePyScripts/tree/05df3c00cf14850befc8657f8b814cad92e086bd/html_parsing/mywishlist_ru)
+ * [mywishlist_ru](https://github.com/gil9red/SimplePyScripts/tree/3c45b7aa45c6fe46185b9cf4c58530403c4e292c/html_parsing/mywishlist_ru)
