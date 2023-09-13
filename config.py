@@ -32,7 +32,11 @@ except:
 
 LOGIN, PASSWORD = TOKEN.split("/")
 
-DIR_NEW_WISHES = DIR / "new_wishes"
+if path := os.environ.get("DIR_NEW_WISHES"):
+    DIR_NEW_WISHES = Path(path)
+else:
+    DIR_NEW_WISHES = DIR / "new_wishes"
+
 DIR_NEW_WISHES.mkdir(exist_ok=True, parents=True)
 
 DIR_OK = DIR_NEW_WISHES / "ok"
