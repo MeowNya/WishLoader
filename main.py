@@ -99,8 +99,9 @@ def main():
 
             shutil.move(file_name, new_file_name)
 
-    except Exception:
+    except Exception as e:
         log.exception("Ошибка:")
+        raise e
 
     finally:
         log.info("Завершено\n")
