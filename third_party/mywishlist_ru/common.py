@@ -4,9 +4,12 @@
 __author__ = "ipetrash"
 
 
+import functools
 import logging
 import io
+import re
 import sys
+import time
 
 from dataclasses import dataclass, field
 from enum import Enum
@@ -14,13 +17,17 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import requests
-from bs4 import BeautifulSoup
+from requests.exceptions import RequestException
+
+from bs4 import BeautifulSoup, Tag
 
 # pip install Pillow
 from PIL import Image
 
 
 BASE_URL = "http://mywishlist.ru"
+
+PATTERN_GET_WISH_ID = re.compile(r"/wish/index/(\d+)")
 
 
 class VisibleModeEnum(Enum):
@@ -73,6 +80,34 @@ def parse(rs: requests.Response) -> BeautifulSoup:
     return BeautifulSoup(rs.content, "html.parser")
 
 
+def attempts(
+    max_number: int = 10,
+    sleep: int = 60,
+    ignored_exceptions: tuple[type(Exception)] = (RequestException,),
+):
+    def actual_decorator(func):
+        @functools.wraps(func)
+        def wrapped(*args, **kwargs):
+            number = 0
+            while True:
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    number += 1
+                    print(f"ERROR on {number}/{max_number}: {e}")
+
+                    if number >= max_number or not isinstance(e, ignored_exceptions):
+                        raise e
+
+                    print(f"Sleep {sleep} seconds")
+                    time.sleep(sleep)
+
+        return wrapped
+
+    return actual_decorator
+
+
+@attempts()
 def do_get(url: str, *args, **kwargs) -> tuple[requests.Response, BeautifulSoup]:
     rs = session.get(url, *args, **kwargs)
     rs.raise_for_status()
@@ -80,6 +115,7 @@ def do_get(url: str, *args, **kwargs) -> tuple[requests.Response, BeautifulSoup]
     return rs, parse(rs)
 
 
+@attempts()
 def do_post(url: str, *args, **kwargs) -> tuple[requests.Response, BeautifulSoup]:
     rs = session.post(url, *args, **kwargs)
     rs.raise_for_status()
@@ -140,6 +176,13 @@ class Api:
         authenticity_token_el = soup.select_one('[name="authenticity_token"]')
         return authenticity_token_el["value"]
 
+    @classmethod
+    def _get_wish_list(cls, soup: BeautifulSoup) -> list[Tag]:
+        return soup.select_one(".pWishList").find_all(
+            name="a",
+            attrs=dict(href=PATTERN_GET_WISH_ID),
+        )
+
     def add_wish(
         self,
         title: str,
@@ -195,22 +238,22 @@ class Api:
             # После сохранения картинки нужно переместить внутренний указатель в начало
             buffer.seek(0)
 
-            files.append(
-                ("wish[picture]", (img_path, buffer))
-            )
+            files.append(("wish[picture]", (img_path, buffer)))
 
         url_post_add_wish = url_get_add_wish + "?autocomplete=false"
-        self._do_post(
-            url_post_add_wish,
-            data=params,
-            files=files
-        )
+        self._do_post(url_post_add_wish, data=params, files=files)
 
-        wish_el = self.last_soup.select_one('.pWishList .pWishData a[href*="/wish"]')
-        if not wish_el:
-            raise Exception("Не удалось найти желание!")
+        wish_el_list = self._get_wish_list(self.last_soup)
+        if not wish_el_list:
+            raise Exception("Не удалось найти список желаний!")
 
-        return int(wish_el["href"].split("/")[-1])
+        # Попробуем найти текущее желание по названию
+        for wish_el in wish_el_list:
+            if title in wish_el.text:
+                wish_id = int(wish_el["href"].split("/")[-1])
+                return wish_id
+
+        raise Exception("Не удалось найти желание!")
 
     def set_wish_as_granted(self, wish_id: int, thanks: str = ""):
         self.log.info(f"Set wish as granted. wish_id: {wish_id}")
@@ -230,6 +273,52 @@ class Api:
             data=params,
         )
 
+        if not self.get_wish_is_granted(wish_id):
+            raise Exception(f"Желание #{wish_id} не было отмечено как выполненное")
+
+    def get_wish_is_granted(self, wish_id: int) -> bool:
+        self.log.info(f"Get wish is granted. wish_id: {wish_id}")
+
+        url_get = f"{self.url_profile}/wish/index/{wish_id}"
+        self._do_get(url_get)
+
+        # Если ссылки нет - желание исполнено
+        return f"/wish/check/{wish_id}" not in self.last_rs.text
+
+    def get_waiting_ids(self, get_all: bool = False) -> list[id]:
+        self.log.info(f"Get waiting ids. get_all: {get_all}")
+
+        url_get = f"{self.url_profile}/waiting"
+
+        page = 1
+
+        ids = []
+        while True:
+            params = {
+                "view[sort]": "m",  # По времени
+                "waiting_page": page,
+            }
+            self._do_get(url_get, params=params)
+
+            # Поиск ид желаний по регулярке
+            for a in self._get_wish_list(self.last_soup):
+                m = PATTERN_GET_WISH_ID.search(a["href"])
+                wish_id = int(m.group(1))
+                if wish_id not in ids:
+                    ids.append(wish_id)
+
+            page += 1
+
+            last_page_el = self.last_soup.select(
+                ".pWishList > .pContainer .pNumbers a"
+            )[-1]
+            last_page = int(last_page_el.text)
+
+            if not get_all or page > last_page:
+                break
+
+        return ids
+
 
 if __name__ == "__main__":
     from datetime import datetime
@@ -239,6 +328,12 @@ if __name__ == "__main__":
 
     api = Api(login, password)
     api.auth()
+
+    ids = api.get_waiting_ids()
+    print(f"Ids first page ({len(ids)}): {ids}")
+
+    ids = api.get_waiting_ids(get_all=True)
+    print(f"Ids all ({len(ids)}): {ids}")
 
     wish_id = api.add_wish(
         title="Черника",
@@ -265,6 +360,8 @@ if __name__ == "__main__":
         visible_mode=VisibleModeEnum.FRIENDS,
     )
     print(f"Добавлено желание #{wish_id}")
+    assert not api.get_wish_is_granted(wish_id)
 
     api.set_wish_as_granted(wish_id, thanks="Благодарности моем коту!")
     print(f"Желание #{wish_id} исполнено!")
+    assert api.get_wish_is_granted(wish_id)
