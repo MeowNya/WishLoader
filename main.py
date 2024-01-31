@@ -11,7 +11,12 @@ from bs4 import BeautifulSoup, Tag
 
 from common import log
 from config import LOGIN, PASSWORD, DIR_NEW_WISHES, DIR_OK, DIR_ERROR
+
+import third_party.mywishlist_ru.common as mywishlist_ru_common
 from third_party.mywishlist_ru.common import Api, VisibleModeEnum, RatingEnum
+
+
+mywishlist_ru_common.ATTEMPTS_SLEEP = 30
 
 
 def wish_add(wish: Tag, api: Api):
