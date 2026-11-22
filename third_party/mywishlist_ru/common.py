@@ -24,10 +24,9 @@ from bs4 import BeautifulSoup, Tag
 # pip install Pillow
 from PIL import Image
 
+BASE_URL: str = "http://mywishlist.ru"
 
-BASE_URL = "http://mywishlist.ru"
-
-PATTERN_GET_WISH_ID = re.compile(r"/wish/index/(\d+)")
+PATTERN_GET_WISH_ID: re.Pattern = re.compile(r"/wish/index/(\d+)")
 
 
 class VisibleModeEnum(Enum):
@@ -57,7 +56,7 @@ def get_logger(
 
     if log_file:
         fh = RotatingFileHandler(
-            file, maxBytes=10000000, backupCount=5, encoding=encoding
+            file, maxBytes=10_000_000, backupCount=5, encoding=encoding
         )
         fh.setFormatter(formatter)
         log.addHandler(fh)
@@ -71,9 +70,9 @@ def get_logger(
 
 
 session = requests.session()
-session.headers[
-    "User-Agent"
-] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0"
+session.headers["User-Agent"] = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0"
+)
 
 
 def parse(rs: requests.Response) -> BeautifulSoup:
@@ -82,11 +81,21 @@ def parse(rs: requests.Response) -> BeautifulSoup:
 
 ATTEMPTS_MAX_NUMBER: int = 10
 ATTEMPTS_SLEEP: int = 60
-ATTEMPTS_IGNORED_EXCEPTIONS: tuple[type(Exception)] = (RequestException,),
+ATTEMPTS_IGNORED_EXCEPTIONS: tuple[type(Exception)] = (RequestException,)
+
+HTTP_TIMEOUT: int = 60
 
 
-def do_request(func: Callable, url: str, *args, **kwargs) -> tuple[requests.Response, BeautifulSoup]:
-    number = 0
+def do_request(
+    func: Callable,
+    url: str,
+    *args,
+    **kwargs,
+) -> tuple[requests.Response, BeautifulSoup]:
+    if kwargs.get("timeout") is None:
+        kwargs["timeout"] = HTTP_TIMEOUT
+
+    number: int = 0
     while True:
         try:
             rs = func(url, *args, **kwargs)
@@ -117,12 +126,12 @@ def do_post(url: str, *args, **kwargs) -> tuple[requests.Response, BeautifulSoup
 class Api:
     login: str
     password: str
-    url_profile: str = None
+    url_profile: str | None = None
     last_rs: requests.Response = field(init=False, repr=False, default=None)
     last_soup: BeautifulSoup = field(init=False, repr=False, default=None)
     log: logging.Logger = field(repr=False, default=None)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.log:
             self.log = get_logger(
                 name=__file__,
@@ -130,12 +139,12 @@ class Api:
                 log_file=False,
             )
 
-    def _do_get(self, url: str, *args, **kwargs):
+    def _do_get(self, url: str, *args, **kwargs) -> None:
         self.log.debug(f"GET. url: {url}, args: {args}, kwargs: {kwargs}")
         self.last_rs, self.last_soup = do_get(url, *args, **kwargs)
         self.log.debug(f"GET. response url: {self.last_rs.url}")
 
-    def _do_post(self, url: str, *args, **kwargs):
+    def _do_post(self, url: str, *args, **kwargs) -> None:
         self.log.debug(f"POST. url: {url}, args: {args}, kwargs: {kwargs}")
         self.last_rs, self.last_soup = do_post(url, *args, **kwargs)
         self.log.debug(f"POST. response url: {self.last_rs.url}")
@@ -212,7 +221,9 @@ class Api:
                 try:
                     self._do_get(img_path)
                 except requests.exceptions.SSLError as e:
-                    self.log.warning(f'Ssl error "{e}" when loading "{img_path}", now trying without verification')
+                    self.log.warning(
+                        f'Ssl error "{e}" when loading "{img_path}", now trying without verification'
+                    )
                     self._do_get(img_path, verify=False)
 
                 buffer = io.BytesIO(self.last_rs.content)
